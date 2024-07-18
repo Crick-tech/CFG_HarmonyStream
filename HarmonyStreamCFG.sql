@@ -191,11 +191,10 @@ s.title AS song_title, -- select the name of the song
 COUNT(Lh.song_id) AS play_count -- select the number of times the song has been played
 FROM Songs s
 JOIN Listening_History Lh ON s.song_id = Lh.song_id -- join wtih listening history to see what songs to the listening history
-GROUP BY 
-song_title -- group by song name 
-ORDER BY 
-play_count DESC -- order from high to low 
- LIMIT 3;
+GROUP BY song_title -- group by song name 
+HAVING play_count >1  
+ORDER BY play_count DESC -- order from high to low 
+LIMIT 3;
 
 
 -- find the top 3 most popular album based on listening history 
@@ -206,27 +205,26 @@ COUNT(Lh.song_id) AS play_count                    -- select the number of times
 FROM Albums a
 JOIN Songs s ON a.album_id = s.album_id                   -- join with songs to see what songs relate to what album
 JOIN Listening_History Lh ON s.song_id = Lh.song_id        -- join wtih listening history to see what songs to the listening history
-GROUP BY 
-album_title                                          -- order by album name
-ORDER BY 
-play_count DESC
+GROUP BY album_title   
+HAVING play_count >1                                       -- order by album name
+ORDER BY play_count DESC
 LIMIT 3;
 
 -- Create a view that finds the the users playlist based on listening history 
 
 CREATE VIEW user_playlists AS
 SELECT 
-u.user_id,
-u.username,
-p.playlist_id,
-p.name AS playlist_name,
-s.song_id,
-s.title AS song_title,
-s.genre,
-a.album_id,
-a.title AS album_title,
-ar.artist_id,
-ar.name AS artist_name
+u.user_id,     -- select the user ID
+u.username, -- select the username
+p.playlist_id, -- select the playlist ID
+p.name AS playlist_name, -- rename to be playlist name title 
+s.song_id, -- select song ID
+s.title AS song_title, -- rename title in song table to song title 
+s.genre, -- select the genre from song table 
+a.album_id, -- select ablum ID
+a.title AS album_title, -- rename the title from album table to be album title 
+ar.artist_id, -- select arist ID
+ar.name AS artist_name -- rename the name field in aritst table to artist name 
 FROM Users u
 JOIN Playlists p ON u.user_id = p.user_id
 JOIN Playlist_Songs ps ON p.playlist_id = ps.playlist_id
@@ -236,20 +234,21 @@ JOIN Artists ar ON a.artist_id = ar.artist_id;
 
 -- Use the view to find the most popular playlists​
 SELECT 
-up.playlist_name AS Playlist_name,
-COUNT(up.playlist_id) AS playlist_count,
-COUNT(up.user_id) AS User_count
-FROM user_playlists up
+up.playlist_name AS Playlist_name, -- rename to be playlist name 
+COUNT(up.playlist_id) AS playlist_count, -- count the number of times that playlist appears in list
+COUNT(up.user_id) AS User_count -- count the number of users that appear 
+FROM user_playlists up 
 GROUP BY 
 up.playlist_name
+HAVING playlist_count >1 -- removing any playlist with only 1 count
 ORDER BY 
 playlist_count DESC ;          
 
 -- Use the view to find the top 3 artists with the most play count from everyone's playlists
 DELIMITER //
-CREATE PROCEDURE get_top_3_artists()
+CREATE PROCEDURE get_top_3_artists()  -- Using a procedure here as beter at handling complex logics to have more than 1 result 
 BEGIN
-CREATE TEMPORARY TABLE IF NOT EXISTS top_3_artists (
+CREATE TEMPORARY TABLE IF NOT EXISTS top_3_artists ( -- creating a temp table store the data collected temporarily within the procedure.
 artist_id INT,
 play_count INT
 );
@@ -267,16 +266,16 @@ END //
 
 DELIMITER ;
 
-CALL get_top_3_artists();
+CALL get_top_3_artists(); -- populates the temporary table with the top artists based on play counts from Listening history
 SELECT 
-up.artist_id,
-up.artist_name,
-COUNT(lh.song_id) AS play_count
-FROM user_playlists up
-JOIN Listening_History lh ON up.song_id = lh.song_id
-WHERE up.artist_id IN (SELECT artist_id FROM top_3_artists)
+up.artist_id, -- select artist ID 
+up.artist_name, -- select arist name 
+COUNT(lh.song_id) AS play_count -- total count of songs played from listening history 
+FROM user_playlists up 
+JOIN Listening_History lh ON up.song_id = lh.song_id  -- link user playlist song id to the listening history song id 
+WHERE up.artist_id IN (SELECT artist_id FROM top_3_artists) 
 GROUP BY 
-up.artist_id,
+up.artist_id, -- group by artist ID & Name to prevent multiple rows for same artist
 up.artist_name
 ORDER BY 
 play_count DESC;
@@ -288,7 +287,7 @@ WHERE user_id = 1;
 
 -- Find the users Favourite Artist based on listening history 
 
--- Define the function to get the most popular artist for a specific user
+-- Define the function to get the most popular artist for a specific user or 1 result 
 DELIMITER //
 CREATE FUNCTION GetMostPopularArtistForUser(userName VARCHAR(50))
 RETURNS VARCHAR(255)
@@ -296,12 +295,12 @@ DETERMINISTIC
 BEGIN
 DECLARE popularArtist VARCHAR(255);
     -- Select the most popular genre for the given user
-SELECT up.artist_name
-INTO popularArtist
+SELECT up.artist_name -- select the artist name from user playlist
+INTO popularArtist -- add to the popularartist  
 FROM user_playlists up
-WHERE up.username = userName
-GROUP BY up.artist_name
-ORDER BY COUNT(up.song_id) DESC
+WHERE up.username = userName -- where the username in userplaylist table = username in the function
+GROUP BY up.artist_name -- group together by arist to prevent multiple rows from different playlists
+ORDER BY COUNT(up.song_id) DESC 
 LIMIT 1;
 RETURN popularArtist;
 END //
